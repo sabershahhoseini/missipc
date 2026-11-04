@@ -13,7 +13,7 @@ from telegram import InlineKeyboardButton as Btn, InlineKeyboardMarkup, InputFil
 from telegram.constants import ParseMode
 from telegram.error import BadRequest, RetryAfter
 
-import config
+from . import config
 
 log = logging.getLogger("sshbot.term")
 

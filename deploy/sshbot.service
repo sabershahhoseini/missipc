@@ -14,7 +14,7 @@ Environment=DATA_DIR=/opt/tgssh/data
 # Environment=HEALTHCHECK_URL=https://hc-ping.com/your-uuid
 ExecStart=/opt/tgssh/venv/bin/python bot.py
 # Or put everything in one file and drop the Environment= lines above:
-# ExecStart=/opt/tgssh/venv/bin/python bot.py --config /opt/tgssh/bot.conf
+# ExecStart=/opt/tgssh/venv/bin/python bot.py --config /opt/tgssh/bot.yaml
 Restart=always
 RestartSec=5
 

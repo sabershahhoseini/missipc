@@ -1,12 +1,15 @@
-"""All settings, read from environment variables -- optionally pre-loaded from a config file.
+"""All settings, read from environment variables -- optionally pre-loaded from a YAML config file.
 
-Pick the file with `python bot.py --config path/to/bot.conf` (or just
-`python bot.py path/to/bot.conf`), or set CONFIG_FILE=path/to/bot.conf.
-Format is plain KEY=VALUE, one per line, '#' comments, values may be quoted.
+Pick the file with `python bot.py --config path/to/bot.yaml` (or just
+`python bot.py path/to/bot.yaml`), or set CONFIG_FILE=path/to/bot.yaml.
+Top-level keys match the environment variable names below (e.g. BOT_TOKEN).
+ALLOWED_USERS / ALERT_CHAT_IDS may be a YAML list or a comma string.
 Real environment variables still win over anything the file sets.
 """
 import os
 import sys
+
+import yaml
 
 
 def _config_path() -> str:
@@ -27,20 +30,21 @@ def _load_config_file():
         return
     try:
         with open(path) as f:
-            lines = f.readlines()
+            data = yaml.safe_load(f) or {}
     except OSError as e:
         raise SystemExit(f"Can't read config file {path}: {e}")
-    for lineno, raw in enumerate(lines, 1):
-        line = raw.strip()
-        if not line or line.startswith("#"):
+    except yaml.YAMLError as e:
+        raise SystemExit(f"Invalid YAML in {path}: {e}")
+    if not isinstance(data, dict):
+        raise SystemExit(f"{path}: expected a mapping of KEY: value at the top level")
+    for k, v in data.items():
+        if v is None:
             continue
-        if "=" not in line:
-            raise SystemExit(f"{path}:{lineno}: expected KEY=VALUE, got: {line}")
-        k, _, v = line.partition("=")
-        k, v = k.strip(), v.strip()
-        if len(v) >= 2 and v[0] == v[-1] and v[0] in "\"'":
-            v = v[1:-1]
-        os.environ.setdefault(k, v)
+        if isinstance(v, list):
+            v = ",".join(str(x) for x in v)
+        elif isinstance(v, bool):
+            v = "1" if v else "0"
+        os.environ.setdefault(str(k), str(v))
 
 
 _load_config_file()

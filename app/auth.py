@@ -4,7 +4,7 @@ import time
 
 import pyotp
 
-import config
+from . import config
 
 
 class Auth:

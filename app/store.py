@@ -3,7 +3,7 @@ import json
 import os
 import time
 
-import config
+from . import config
 
 DEFAULTS = {
     "totp": {},          # uid -> {secret, enabled, last_step}

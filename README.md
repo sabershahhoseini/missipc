@@ -20,6 +20,24 @@ file transfer, monitoring with alerts, and authenticator-app 2FA.
   host-key pinning (refuses on change — MITM protection), confirmation
   prompts before destructive-looking commands, and an audit log.
 
+## Project structure
+
+```
+bot.py                     entry point — run this
+app/                        bot package
+  bot.py                    Telegram handlers
+  auth.py                   2FA (TOTP) + unlock window
+  config.py                 settings (env vars / config file)
+  monitor.py                checks, alerting, dashboard
+  sshconn.py                SSH connection/key plumbing
+  store.py                  JSON store + audit log
+  terminal.py               VT100 terminal sessions, screenshots
+deploy/
+  sshbot.service            systemd unit
+  bot.yaml.example          config file template
+data/                        created at runtime — keys, 2FA secrets, audit log (gitignored)
+```
+
 ## Setup
 
 ```bash
@@ -35,22 +53,29 @@ add the setup key (or scan the QR) in your authenticator app, and send the
 6‑digit code. After that, the bot locks itself after 15 minutes without
 activity; just send a fresh code to unlock.
 
-For running it permanently, see `sshbot.service`.
+For running it permanently, see `deploy/sshbot.service`.
 
 ### Config file instead of env vars
 
-Any setting below can go in a plain `KEY=VALUE` file instead of exporting env
-vars every time:
+Any setting below can go in a YAML file instead of exporting env vars every
+time (top-level keys match the variable names):
 
 ```bash
-cp bot.conf.example bot.conf   # edit it
-python bot.py --config bot.conf
-# or: python bot.py bot.conf
-# or: CONFIG_FILE=bot.conf python bot.py
+cp deploy/bot.yaml.example bot.yaml   # edit it
+python bot.py --config bot.yaml
+# or: python bot.py bot.yaml
+# or: CONFIG_FILE=bot.yaml python bot.py
+```
+
+```yaml
+BOT_TOKEN: "123456:ABC..."
+ALLOWED_USERS: [11111111]
+IDLE_TIMEOUT_MIN: 30
 ```
 
 Real environment variables still take priority over the file, so you can mix
 both (e.g. keep `BOT_TOKEN` out of the file and export it separately).
+`ALLOWED_USERS` / `ALERT_CHAT_IDS` accept either a YAML list or a comma string.
 
 ## Settings (environment variables, or the same names in a config file)
 
@@ -69,7 +94,7 @@ both (e.g. keep `BOT_TOKEN` out of the file and export it separately).
 | `HEALTHCHECK_URL` | – | Pinged on `HEALTHCHECK_INTERVAL` (dead man's switch, e.g. healthchecks.io) |
 | `HEALTHCHECK_INTERVAL` | `300` | Seconds between heartbeat pings |
 | `FONT_PATH` | auto | Monospace TTF for screenshots |
-| `CONFIG_FILE` | – | Path to a `KEY=VALUE` config file (same as `--config`) |
+| `CONFIG_FILE` | – | Path to a YAML config file (same as `--config`) |
 
 ## Quick tour
 

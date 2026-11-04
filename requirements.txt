@@ -5,3 +5,4 @@ pyotp>=2.9
 qrcode[pil]>=7.4
 pillow>=10
 httpx>=0.25
+PyYAML>=6

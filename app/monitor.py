@@ -9,9 +9,8 @@ import httpx
 from telegram import InlineKeyboardButton as Btn, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 
-import config
-import sshconn
-from terminal import ago, tg
+from . import config, sshconn
+from .terminal import ago, tg
 
 log = logging.getLogger("sshbot.monitor")
 

@@ -3,6 +3,8 @@ __pycache__/
 venv/
 .venv/
 data/
-*.conf
-!*.conf.example
+*.yaml
+*.yml
+!*.yaml.example
+!*.yml.example
 .DS_Store
