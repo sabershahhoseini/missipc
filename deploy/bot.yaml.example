@@ -24,6 +24,11 @@ monitoring:
 claude:
   bin: claude                       # path to the Claude Code CLI, if not on PATH
   timeout_sec: 120                  # how long to wait for a reply before giving up
+  # What Claude may do. It runs non-interactively, so there's no way to approve a
+  # permission prompt -- anything not pre-allowed here fails instead of running.
+  mode: default                     # default | plan | acceptEdits | bypassPermissions
+  allowed_tools: "Read,Grep,Glob,WebFetch,WebSearch"   # whitelist; blank = CLI default
+  extra_args: ""                    # passed through verbatim, e.g. "--model sonnet"
 
 data_dir: data                      # hosts, keys, pinned host keys, 2FA secrets, audit log
 font_path: ""                       # monospace TTF for screenshots; blank = auto-detect

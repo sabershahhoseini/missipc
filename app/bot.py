@@ -336,7 +336,8 @@ Import a key: send the file with caption <code>/importkey name [passphrase]</cod
 
 <b>Chat</b>
 /chat — talk to Claude instead of a server (uses your Claude Code login, no API key)
-/newchat — reset the conversation  ·  /endchat — back to normal (SSH input)
+/chats — your saved conversations  ·  /newchat [<i>name</i>] — start another
+/transcript — the whole conversation as a file  ·  /endchat — back to SSH input
 
 <b>Security</b>
 /2fa · /lock · /audit [<i>n</i>]"""
@@ -361,12 +362,33 @@ def menu_view(uid, chat, mode=None):
                [B("❓ Help", "help")]))
 
 
-def chat_banner() -> str:
-    return "🤖 <b>Chat mode on.</b> Type normally to talk to Claude instead of a server."
+def chat_banner(chat) -> str:
+    _, conv = claudechat.active(store, chat)
+    where = f" · <b>{esc(conv['name'])}</b>" if conv else ""
+    policy = config.CLAUDE_MODE + (f", tools: {config.CLAUDE_ALLOWED_TOOLS}" if config.CLAUDE_ALLOWED_TOOLS else "")
+    return (f"🤖 <b>Chat mode on.</b>{where}\nType normally to talk to Claude instead of a server.\n"
+            f"<i>{esc(policy)}</i>")
 
 
 def chat_kb() -> InlineKeyboardMarkup:
-    return KB([B("🆕 New chat", "nc"), B("🖥 Back to SSH", "ec"), B("🏠 Menu", "menu")])
+    return KB([B("🆕 New", "clnew"), B("💬 Chats", "cll"), B("📄 Transcript", "clt")],
+              [B("🖥 Back to SSH", "ec"), B("🏠 Menu", "menu")])
+
+
+def chats_view(chat):
+    convs = claudechat.for_chat(store, chat)
+    act, _ = claudechat.active(store, chat)
+    if not convs:
+        return ("💬 <b>Claude chats</b>\n\nNone yet.",
+                KB([B("🆕 New chat", "clnew"), B("🏠 Menu", "menu")]))
+    now, lines, rows = time.time(), ["💬 <b>Claude chats</b>", ""], []
+    for cid, c in sorted(convs.items(), key=lambda kv: -kv[1]["last"]):
+        mark = "⭐" if cid == act else "▫️"
+        lines.append(f"{mark} <b>{esc(c['name'])}</b> · {len(c['turns'])} turn(s) · "
+                     f"{ago(now - c['last'])} ago")
+        rows.append([B(f"💬 {c['name'][:18]}", f"clc:{cid}"), B("✏️", f"clr:{cid}"), B("🗑", f"cld:{cid}")])
+    rows.append([B("🆕 New chat", "clnew"), B("🏠 Menu", "menu")])
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
 def sessions_view(chat):
@@ -755,16 +777,43 @@ async def cmd_lock(update, ctx):
 
 @gated
 async def cmd_chat(update, ctx):
+    chat = update.effective_chat.id
     ctx.chat_data["mode"] = "claude"
-    await send(ctx.bot, update.effective_chat.id, chat_banner(), chat_kb())
+    claudechat.ensure(store, chat)
+    await send(ctx.bot, chat, chat_banner(chat), chat_kb())
 
 
 @gated
 async def cmd_newchat(update, ctx):
     chat = update.effective_chat.id
-    claudechat.reset(store, chat)
+    cid, conv = claudechat.create(store, chat, cmd_arg(update))
     ctx.chat_data["mode"] = "claude"
-    await send(ctx.bot, chat, "🆕 Started a fresh Claude conversation.\n" + chat_banner(), chat_kb())
+    await send(ctx.bot, chat, f"🆕 New conversation <b>{esc(conv['name'])}</b>.\n" + chat_banner(chat), chat_kb())
+
+
+@gated
+async def cmd_chats(update, ctx):
+    await send(ctx.bot, update.effective_chat.id, *chats_view(update.effective_chat.id))
+
+
+@gated
+async def cmd_transcript(update, ctx):
+    await send_transcript(ctx, update.effective_chat.id)
+
+
+async def send_transcript(ctx, chat):
+    cid, conv = claudechat.active(store, chat)
+    if not conv:
+        await send(ctx.bot, chat, "No Claude conversation yet. /chat to start one.", chat_kb())
+        return
+    if not conv["turns"]:
+        await send(ctx.bot, chat, f"<b>{esc(conv['name'])}</b> has no messages yet.", chat_kb())
+        return
+    text = claudechat.transcript(store, cid)
+    name = re.sub(r"[^A-Za-z0-9_-]", "-", conv["name"])[:30] or "chat"
+    await ctx.bot.send_document(chat, InputFile(io.BytesIO(text.encode()), filename=f"{name}.txt"),
+                                caption=f"📄 {esc(conv['name'])} · {len(conv['turns'])} turn(s)",
+                                parse_mode=HTML)
 
 
 @gated
@@ -1342,6 +1391,11 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             await generate_key(ctx, chat, uid, text)
         elif awaiting == "ckparam":
             await ck_param(ctx, chat, text)
+        elif awaiting == "clname":
+            ctx.chat_data.pop("await", None)
+            cid = ctx.chat_data.pop("clrename", "")
+            claudechat.rename(store, chat, cid, text)
+            await send(ctx.bot, chat, *chats_view(chat))
         return
 
     step = ctx.chat_data.get("step")
@@ -1549,11 +1603,35 @@ async def on_button(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await ask_code(ctx, chat, {"kind": "2fa_disable"}, "Disable two-factor?")
     elif data == "chat_on":
         ctx.chat_data["mode"] = "claude"
-        await show(q, ctx, chat_banner(), chat_kb())
-    elif data == "nc":
-        claudechat.reset(store, chat)
+        claudechat.ensure(store, chat)
+        await show(q, ctx, chat_banner(chat), chat_kb())
+    elif data == "clnew":
+        cid, conv = claudechat.create(store, chat)
         ctx.chat_data["mode"] = "claude"
-        await show(q, ctx, "🆕 Started a fresh Claude conversation.\n" + chat_banner(), chat_kb())
+        await show(q, ctx, f"🆕 New conversation <b>{esc(conv['name'])}</b>.\n" + chat_banner(chat), chat_kb())
+    elif data == "cll":
+        await show(q, ctx, *chats_view(chat))
+    elif data == "clt":
+        await send_transcript(ctx, chat)
+    elif head == "clc":
+        conv = claudechat.switch(store, chat, rest)
+        ctx.chat_data["mode"] = "claude"
+        if conv:
+            await show(q, ctx, f"💬 Switched to <b>{esc(conv['name'])}</b>.\n" + chat_banner(chat), chat_kb())
+        else:
+            await show(q, ctx, *chats_view(chat))
+    elif head == "clr":
+        ctx.chat_data["await"] = "clname"
+        ctx.chat_data["clrename"] = rest
+        await send(ctx.bot, chat, "✏️ Send a new name for this conversation:", KB([B("✖ Cancel", "cna")]))
+    elif head == "cld":
+        conv = claudechat.for_chat(store, chat).get(rest)
+        if conv:
+            await show(q, ctx, f"Delete <b>{esc(conv['name'])}</b> and its transcript?",
+                       KB([B("🗑 Yes, delete", f"cldy:{rest}"), B("✖ No", "cll")]))
+    elif head == "cldy":
+        claudechat.delete(store, chat, rest)
+        await show(q, ctx, *chats_view(chat))
     elif data == "ec":
         ctx.chat_data.pop("mode", None)
         s = mgr.current(chat)
@@ -1797,7 +1875,9 @@ COMMANDS = [
     ("keys", "SSH keys"), ("installkey", "Install a key on this server"), ("checks", "Monitoring checks"),
     ("status", "Monitoring overview"), ("mute", "Mute alerts"), ("unmute", "Unmute alerts"),
     ("audit", "Audit log"), ("2fa", "Two-factor settings"), ("lock", "Lock now"),
-    ("chat", "Talk to Claude"), ("newchat", "Fresh Claude conversation"), ("endchat", "Exit chat mode"),
+    ("chat", "Talk to Claude"), ("chats", "Saved Claude conversations"),
+    ("newchat", "Start another conversation"), ("transcript", "Conversation as a file"),
+    ("endchat", "Exit chat mode"),
     ("help", "All commands"),
 ]
 
@@ -1838,6 +1918,7 @@ def main():
         "installkey": cmd_installkey, "forget": cmd_forget, "checks": cmd_checks, "check": cmd_check,
         "mute": cmd_mute, "unmute": cmd_unmute, "status": cmd_status, "audit": cmd_audit,
         "chat": cmd_chat, "newchat": cmd_newchat, "endchat": cmd_endchat,
+        "chats": cmd_chats, "transcript": cmd_transcript,
     }
     for name, fn in handlers.items():
         APP.add_handler(CommandHandler(name, fn, filters=allowed))

@@ -25,6 +25,9 @@ argument, or CONFIG_FILE=path/to/bot.yaml). Shape:
     claude:
       bin: claude
       timeout_sec: 120
+      mode: default                 # default | plan | acceptEdits | bypassPermissions
+      allowed_tools: "Read,Grep"    # tool whitelist; blank = whatever the CLI defaults to
+      extra_args: ""                # anything else to pass through, e.g. --model
 
     data_dir: data
     font_path: ""
@@ -146,3 +149,8 @@ FONT_PATH = _str("FONT_PATH", "font_path", "")
 
 CLAUDE_BIN = _str("CLAUDE_BIN", "claude.bin", "claude")
 CLAUDE_TIMEOUT = _int("CLAUDE_TIMEOUT_SEC", "claude.timeout_sec", 120)
+# What Claude is allowed to do. Default: read-only tools, in an empty dir.
+CLAUDE_MODE = _str("CLAUDE_MODE", "claude.mode", "default")
+CLAUDE_ALLOWED_TOOLS = _str("CLAUDE_ALLOWED_TOOLS", "claude.allowed_tools",
+                            "Read,Grep,Glob,WebFetch,WebSearch")
+CLAUDE_EXTRA_ARGS = _str("CLAUDE_EXTRA_ARGS", "claude.extra_args", "")

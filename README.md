@@ -61,7 +61,15 @@ host to key auth permanently. Send a file to upload it, `/get path` to
 download. `/all cmd` runs on every open session.
 
 **Claude:** `/chat` to start — type normally, it replies in-chat and
-remembers context. `/newchat` resets it, `/endchat` goes back to SSH input.
+remembers context. Conversations are saved and named: `/chats` lists them
+(switch, rename, delete), `/newchat [name]` starts another, `/transcript`
+pulls the whole thing out as a text file. `/endchat` goes back to SSH input.
+
+What Claude is allowed to do is set in config, not at runtime — it runs
+non-interactively, so there's no way to approve a permission prompt, and
+anything outside `claude.allowed_tools` fails instead of running. The
+default is read-only tools in an empty working directory. `claude.mode`
+takes `default`, `plan`, `acceptEdits` or `bypassPermissions`.
 
 **Monitoring:** `/checks` → ➕ Add check (disk, service, load, memory, HTTP,
 or any command). Alerts after 2 failed runs in a row, and on recovery.
@@ -77,6 +85,9 @@ or any command). Alerts after 2 failed runs in a row, and on recovery.
   encrypted, even though the bot deletes password messages.
 - Host keys are pinned on first connect; a changed key refuses the
   connection outright (MITM protection). `/forget host:port` clears a pin.
+- Think twice before widening `claude.mode`/`claude.allowed_tools`: this
+  host holds your SSH keys and 2FA secrets, so a Claude with `Bash` here is
+  effectively root on every server the bot can reach.
 - This is a safety net against mistakes, not a defense against someone who
   already controls your Telegram account or bot token — treat both as
   equivalent to root on everything this bot reaches.

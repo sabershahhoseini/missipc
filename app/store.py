@@ -13,7 +13,9 @@ DEFAULTS = {
     "checks": {},        # id -> check definition
     "next_check_id": 1,
     "mutes": {},         # "host:<name>" / "check:<id>" -> unix time until
-    "claude_sessions": {},  # chat_id (str) -> Claude Code session id
+    "claude_chats": {},     # id -> {chat_id, name, session_id, created, last, turns[]}
+    "claude_active": {},    # chat_id (str) -> conversation id
+    "next_claude_id": 1,
 }
 
 
