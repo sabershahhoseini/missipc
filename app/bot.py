@@ -18,7 +18,7 @@ from telegram.ext import (Application, CallbackQueryHandler, CommandHandler, Con
                           MessageHandler, filters)
 from telegram.request import HTTPXRequest
 
-from . import config, sshconn
+from . import claudechat, config, sshconn
 from .auth import Auth
 from .monitor import DASH_CMD, INTERVALS, TYPES, Monitor, build_check, format_dash
 from .store import Store
@@ -270,6 +270,10 @@ Import a key: send the file with caption <code>/importkey name [passphrase]</cod
 /checks · /check add · /check del|pause|resume|run <i>id</i>
 /status · /mute <i>host|#id</i> [<i>2h</i>] · /unmute <i>host|#id</i>
 
+<b>Chat</b>
+/chat — talk to Claude instead of a server (uses your Claude Code login, no API key)
+/newchat — reset the conversation  ·  /endchat — back to normal (SSH input)
+
 <b>Security</b>
 /2fa · /lock · /audit [<i>n</i>]"""
 
@@ -286,8 +290,17 @@ def menu_view(uid, chat):
             KB([B("🔐 Connect", "new"), B(f"⭐ Hosts ({len(store['hosts'])})", "hosts")],
                [B(f"🖥 Sessions ({len(sess)})", "sessions"), B("🩺 Checks", "checks")],
                [B("⚡ Snippets", "snips:a"), B("🔑 Keys", "keys")],
+               [B("🤖 Chat with Claude", "chat_on")],
                [B("📋 Status", "status"), B("📜 Audit", "audit"), B("🔒 Lock", "lock")],
                [B("❓ Help", "help")]))
+
+
+def chat_banner() -> str:
+    return "🤖 <b>Chat mode on.</b> Type normally to talk to Claude instead of a server."
+
+
+def chat_kb() -> InlineKeyboardMarkup:
+    return KB([B("🆕 New chat", "nc"), B("⏹ End chat", "ec"), B("🏠 Menu", "menu")])
 
 
 def sessions_view(chat):
@@ -672,6 +685,45 @@ async def cmd_2fa(update, ctx):
 async def cmd_lock(update, ctx):
     auth.lock(update.effective_user.id)
     await send(ctx.bot, update.effective_chat.id, "🔒 Locked. Send a code to unlock.")
+
+
+@gated
+async def cmd_chat(update, ctx):
+    ctx.chat_data["mode"] = "claude"
+    await send(ctx.bot, update.effective_chat.id, chat_banner(), chat_kb())
+
+
+@gated
+async def cmd_newchat(update, ctx):
+    chat = update.effective_chat.id
+    claudechat.reset(store, chat)
+    ctx.chat_data["mode"] = "claude"
+    await send(ctx.bot, chat, "🆕 Started a fresh Claude conversation.\n" + chat_banner(), chat_kb())
+
+
+@gated
+async def cmd_endchat(update, ctx):
+    ctx.chat_data.pop("mode", None)
+    await send(ctx.bot, update.effective_chat.id, "⏹ Chat mode off. Back to normal.", KB([B("🏠 Menu", "menu")]))
+
+
+async def send_claude_reply(ctx, chat, ok: bool, reply: str):
+    reply = (reply or "").strip() or "(empty response)"
+    chunk = 3500
+    parts = [reply[i:i + chunk] for i in range(0, len(reply), chunk)] or [reply]
+    prefix = "🤖 " if ok else "❌ "
+    for i, part in enumerate(parts):
+        text = (prefix if i == 0 else "") + esc(part)
+        await send(ctx.bot, chat, text, chat_kb() if i == len(parts) - 1 else None)
+
+
+async def handle_claude_text(ctx, uid, chat, text):
+    note = await send(ctx.bot, chat, "🤖 <i>thinking…</i>")
+    ok, reply = await claudechat.ask(store, chat, text)
+    if note:
+        await try_delete(ctx.bot, chat, note.message_id)
+    store.audit(uid, "claude_chat", ok=ok, chars=len(text))
+    await send_claude_reply(ctx, chat, ok, reply)
 
 
 @gated
@@ -1246,6 +1298,10 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await wizard(ctx, chat, uid, d, err)
         return
 
+    if ctx.chat_data.get("mode") == "claude":
+        await handle_claude_text(ctx, uid, chat, raw)
+        return
+
     s = mgr.current(chat)
     if s:
         await send_input(ctx, uid, s, raw, msg)
@@ -1414,6 +1470,16 @@ async def on_button(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await ask_code(ctx, chat, {"kind": "2fa_reset"}, "Reset two-factor (link a new authenticator)?")
     elif data == "2d":
         await ask_code(ctx, chat, {"kind": "2fa_disable"}, "Disable two-factor?")
+    elif data == "chat_on":
+        ctx.chat_data["mode"] = "claude"
+        await show(q, ctx, chat_banner(), chat_kb())
+    elif data == "nc":
+        claudechat.reset(store, chat)
+        ctx.chat_data["mode"] = "claude"
+        await show(q, ctx, "🆕 Started a fresh Claude conversation.\n" + chat_banner(), chat_kb())
+    elif data == "ec":
+        ctx.chat_data.pop("mode", None)
+        await show(q, ctx, "⏹ Chat mode off.", KB([B("🏠 Menu", "menu")]))
 
     # ---------- sessions ----------
     elif head == "sw":
@@ -1648,7 +1714,9 @@ COMMANDS = [
     ("shot", "Terminal screenshot"), ("get", "Download a file"), ("hosts", "Saved hosts"),
     ("keys", "SSH keys"), ("installkey", "Install a key on this server"), ("checks", "Monitoring checks"),
     ("status", "Monitoring overview"), ("mute", "Mute alerts"), ("unmute", "Unmute alerts"),
-    ("audit", "Audit log"), ("2fa", "Two-factor settings"), ("lock", "Lock now"), ("help", "All commands"),
+    ("audit", "Audit log"), ("2fa", "Two-factor settings"), ("lock", "Lock now"),
+    ("chat", "Talk to Claude"), ("newchat", "Fresh Claude conversation"), ("endchat", "Exit chat mode"),
+    ("help", "All commands"),
 ]
 
 
@@ -1687,6 +1755,7 @@ def main():
         "snippets": cmd_snippets, "snip": cmd_snip, "hosts": cmd_hosts, "host": cmd_host, "keys": cmd_keys,
         "installkey": cmd_installkey, "forget": cmd_forget, "checks": cmd_checks, "check": cmd_check,
         "mute": cmd_mute, "unmute": cmd_unmute, "status": cmd_status, "audit": cmd_audit,
+        "chat": cmd_chat, "newchat": cmd_newchat, "endchat": cmd_endchat,
     }
     for name, fn in handlers.items():
         APP.add_handler(CommandHandler(name, fn, filters=allowed))

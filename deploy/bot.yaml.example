@@ -21,5 +21,9 @@ monitoring:
   healthcheck_url: ""               # pinged periodically, e.g. a healthchecks.io URL
   healthcheck_interval: 300         # seconds between heartbeat pings
 
+claude:
+  bin: claude                       # path to the Claude Code CLI, if not on PATH
+  timeout_sec: 120                  # how long to wait for a reply before giving up
+
 data_dir: data                      # hosts, keys, pinned host keys, 2FA secrets, audit log
 font_path: ""                       # monospace TTF for screenshots; blank = auto-detect

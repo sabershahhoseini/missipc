@@ -19,6 +19,9 @@ file transfer, monitoring with alerts, and authenticator-app 2FA.
 - **Security**: mandatory authenticator-app 2FA with a sliding unlock window,
   host-key pinning (refuses on change — MITM protection), confirmation
   prompts before destructive-looking commands, and an audit log.
+- **Chat with Claude**: `/chat` turns the current Telegram chat into a Claude
+  conversation (uses your Claude Code CLI login — Pro/Max subscription, no
+  API key, no extra billing).
 
 ## Project structure
 
@@ -27,6 +30,7 @@ bot.py                     entry point — run this
 app/                        bot package
   bot.py                    Telegram handlers
   auth.py                   2FA (TOTP) + unlock window
+  claudechat.py             Claude Code CLI chat sessions
   config.py                 settings (env vars / config file)
   monitor.py                checks, alerting, dashboard
   sshconn.py                SSH connection/key plumbing
@@ -102,7 +106,33 @@ Env var always wins; otherwise falls back to the YAML path, then the default.
 | `HEALTHCHECK_URL` | `monitoring.healthcheck_url` | – | Pinged on `healthcheck_interval` (dead man's switch, e.g. healthchecks.io) |
 | `HEALTHCHECK_INTERVAL` | `monitoring.healthcheck_interval` | `300` | Seconds between heartbeat pings |
 | `FONT_PATH` | `font_path` | auto | Monospace TTF for screenshots |
+| `CLAUDE_BIN` | `claude.bin` | `claude` | Path to the Claude Code CLI, if not on PATH |
+| `CLAUDE_TIMEOUT_SEC` | `claude.timeout_sec` | `120` | How long to wait for a Claude reply |
 | `CONFIG_FILE` | – | – | Path to the YAML config file (same as `--config`) |
+
+## Chat with Claude
+
+On the machine running the bot:
+
+```bash
+npm install -g @anthropic-ai/claude-code   # or whatever install method is current
+claude login                               # once; device-code flow works fine over SSH
+```
+
+This uses your Claude Pro/Max subscription — no API key, usage comes out of
+your normal plan quota. In Telegram:
+
+- `/chat` switches the current chat into Claude mode: type normally and it
+  goes to Claude instead of whatever SSH session is open. The reply keeps
+  conversation context across messages.
+- `/newchat` starts a fresh conversation (drops prior context).
+- `/endchat` switches back — typed text goes to your SSH session again.
+
+Each chat's Claude conversation runs isolated in its own empty working
+directory under `DATA_DIR`, so a tool-use attempt by Claude has nothing of
+yours to touch; since it's non-interactive there's also no way to approve a
+permission prompt, so anything needing approval just fails instead of
+running.
 
 ## Quick tour
 

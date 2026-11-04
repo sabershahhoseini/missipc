@@ -22,6 +22,10 @@ argument, or CONFIG_FILE=path/to/bot.yaml). Shape:
       healthcheck_url: ""
       healthcheck_interval: 300
 
+    claude:
+      bin: claude
+      timeout_sec: 120
+
     data_dir: data
     font_path: ""
 
@@ -139,3 +143,6 @@ HEALTHCHECK_URL = _str("HEALTHCHECK_URL", "monitoring.healthcheck_url", "")
 HEALTHCHECK_INTERVAL = _int("HEALTHCHECK_INTERVAL", "monitoring.healthcheck_interval", 300)
 
 FONT_PATH = _str("FONT_PATH", "font_path", "")
+
+CLAUDE_BIN = _str("CLAUDE_BIN", "claude.bin", "claude")
+CLAUDE_TIMEOUT = _int("CLAUDE_TIMEOUT_SEC", "claude.timeout_sec", 120)
