@@ -1,6 +1,4 @@
-# *I miss my PC.*
-
-*I miss my PC.*
+# I miss my PC :(
 
 For when your laptop isn't with you but a server needs SSHing into, or you
 just want to ask Claude something — a live terminal and a Claude chat, both
