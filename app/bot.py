@@ -57,6 +57,70 @@ def esc(s) -> str:
     return html.escape(str(s))
 
 
+# ---- light markdown -> Telegram HTML, for Claude's replies ----
+
+_FENCE_RE = re.compile(r"```(?:\w+)?\n([\s\S]*?)```")
+_INLINE_CODE_RE = re.compile(r"`([^`\n]+?)`")
+_BULLET_RE = re.compile(r"(?m)^(\s*)[*-]\s+")
+_BOLD_RE = re.compile(r"\*\*(.+?)\*\*")
+_ITALIC_RE = re.compile(r"\*(.+?)\*")
+
+
+def md_to_html(text: str) -> str:
+    """A deliberately small markdown subset -> Telegram HTML: fenced/inline
+    code, bold, italic, bullet lines. Everything else stays literal text.
+    Code is protected from the later regexes so **kwargs/*args inside code
+    never get misread as emphasis markers."""
+    text = html.escape(text)
+    blocks: list[str] = []
+
+    def _block(m):
+        blocks.append(f"<pre><code>{m.group(1).strip()}</code></pre>")
+        return f"\x00B{len(blocks) - 1}\x00"
+
+    text = _FENCE_RE.sub(_block, text)
+
+    spans: list[str] = []
+
+    def _span(m):
+        spans.append(f"<code>{m.group(1)}</code>")
+        return f"\x00S{len(spans) - 1}\x00"
+
+    text = _INLINE_CODE_RE.sub(_span, text)
+    text = _BULLET_RE.sub(r"\1• ", text)
+    text = _BOLD_RE.sub(r"<b>\1</b>", text)
+    text = _ITALIC_RE.sub(r"<i>\1</i>", text)
+    text = re.sub(r"\x00S(\d+)\x00", lambda m: spans[int(m[1])], text)
+    text = re.sub(r"\x00B(\d+)\x00", lambda m: blocks[int(m[1])], text)
+    return text
+
+
+def md_chunks(text: str, limit: int = 3500) -> list[str]:
+    """Split into Telegram-sized pieces on line boundaries. When a split lands
+    inside a ``` block, close and reopen the fence so every piece still
+    converts to balanced HTML on its own."""
+    chunks, lines, size, lang = [], [], 0, None    # lang is set while inside a fence
+
+    def flush():
+        nonlocal lines, size
+        chunks.append("\n".join(lines) + ("\n```" if lang is not None else ""))
+        lines = [f"```{lang}"] if lang is not None else []
+        size = sum(len(l) + 1 for l in lines)
+
+    for raw in text.splitlines():
+        for line in [raw[i:i + limit] for i in range(0, len(raw), limit)] or [raw]:
+            if lines and size + len(line) + 1 > limit:
+                flush()
+            lines.append(line)
+            size += len(line) + 1
+            m = re.fullmatch(r"```(\w*)", line.strip())
+            if m:
+                lang = None if lang is not None else m[1]
+    if lines:
+        chunks.append("\n".join(lines))
+    return [c for c in chunks if c.strip()] or [text]
+
+
 def human(n: int) -> str:
     for unit in ("B", "KB", "MB", "GB"):
         if n < 1024 or unit == "GB":
@@ -208,7 +272,7 @@ async def handle_code(update, ctx, code):
         store.audit(uid, "2fa_enabled")
         await send(ctx.bot, chat, f"✅ <b>Two-factor enabled.</b> Unlocked for {config.UNLOCK_MINUTES} min "
                                   "after your last action. When locked, just send a code.")
-        await send(ctx.bot, chat, *menu_view(uid, chat))
+        await send(ctx.bot, chat, *menu_view(uid, chat, ctx.chat_data.get("mode")))
     elif mode == "confirm":
         action = ctx.chat_data.pop("confirm", None)
         if action:
@@ -278,7 +342,7 @@ Import a key: send the file with caption <code>/importkey name [passphrase]</cod
 /2fa · /lock · /audit [<i>n</i>]"""
 
 
-def menu_view(uid, chat):
+def menu_view(uid, chat, mode=None):
     sess = mgr.for_chat(chat)
     checks = store["checks"]
     failing = sum(1 for c in checks if monitor.status_icon(c) == "🔴")
@@ -286,6 +350,8 @@ def menu_view(uid, chat):
     line = f"{lock} · {len(sess)} session(s) · {len(checks)} check(s)"
     if failing:
         line += f" · 🔴 {failing} failing"
+    if mode == "claude":
+        line += " · 🤖 chat mode"
     return (f"🖥 <b>MissiPC</b>\n{line}",
             KB([B("🔐 Connect", "new"), B(f"⭐ Hosts ({len(store['hosts'])})", "hosts")],
                [B(f"🖥 Sessions ({len(sess)})", "sessions"), B("🩺 Checks", "checks")],
@@ -300,7 +366,7 @@ def chat_banner() -> str:
 
 
 def chat_kb() -> InlineKeyboardMarkup:
-    return KB([B("🆕 New chat", "nc"), B("⏹ End chat", "ec"), B("🏠 Menu", "menu")])
+    return KB([B("🆕 New chat", "nc"), B("🖥 Back to SSH", "ec"), B("🏠 Menu", "menu")])
 
 
 def sessions_view(chat):
@@ -657,7 +723,7 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await send(ctx.bot, chat, lock_text(uid))
         return
     auth.touch(uid)
-    await send(ctx.bot, chat, *menu_view(uid, chat))
+    await send(ctx.bot, chat, *menu_view(uid, chat, ctx.chat_data.get("mode")))
 
 
 async def cmd_help(update, ctx):
@@ -703,17 +769,27 @@ async def cmd_newchat(update, ctx):
 
 @gated
 async def cmd_endchat(update, ctx):
+    chat = update.effective_chat.id
     ctx.chat_data.pop("mode", None)
-    await send(ctx.bot, update.effective_chat.id, "⏹ Chat mode off. Back to normal.", KB([B("🏠 Menu", "menu")]))
+    s = mgr.current(chat)
+    if s:
+        await send(ctx.bot, chat, "⏹ Chat mode off — back to your session.")
+        await s.refresh(repost=True)
+    else:
+        await send(ctx.bot, chat, "⏹ Chat mode off. Back to normal.", KB([B("🏠 Menu", "menu")]))
 
 
 async def send_claude_reply(ctx, chat, ok: bool, reply: str):
     reply = (reply or "").strip() or "(empty response)"
-    chunk = 3500
-    parts = [reply[i:i + chunk] for i in range(0, len(reply), chunk)] or [reply]
     prefix = "🤖 " if ok else "❌ "
+    if not ok:
+        parts = [reply]  # error text: plain, don't run markdown on it
+        render = esc
+    else:
+        parts = md_chunks(reply)
+        render = md_to_html
     for i, part in enumerate(parts):
-        text = (prefix if i == 0 else "") + esc(part)
+        text = (prefix if i == 0 else "") + render(part)
         await send(ctx.bot, chat, text, chat_kb() if i == len(parts) - 1 else None)
 
 
@@ -1306,7 +1382,8 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if s:
         await send_input(ctx, uid, s, raw, msg)
         return
-    await send(ctx.bot, chat, "No active session.\n\n" + menu_view(uid, chat)[0], menu_view(uid, chat)[1])
+    mv = menu_view(uid, chat, ctx.chat_data.get("mode"))
+    await send(ctx.bot, chat, "No active session.\n\n" + mv[0], mv[1])
 
 
 async def save_host(ctx, chat, uid, name):
@@ -1396,7 +1473,7 @@ async def on_button(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         ctx.chat_data.pop("confirm", None)
         ctx.chat_data.pop("await_code", None)
         await tg(lambda: q.answer("Cancelled"))
-        await show(q, ctx, *menu_view(uid, chat))
+        await show(q, ctx, *menu_view(uid, chat, ctx.chat_data.get("mode")))
         return
     if not auth.is_unlocked(uid):
         await tg(lambda: q.answer("🔒 Locked — send your 6-digit code first.", show_alert=True))
@@ -1446,7 +1523,7 @@ async def on_button(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     # ---------- navigation ----------
     if data == "menu":
         ctx.chat_data["step"] = None
-        await show(q, ctx, *menu_view(uid, chat))
+        await show(q, ctx, *menu_view(uid, chat, ctx.chat_data.get("mode")))
     elif data == "help":
         await show(q, ctx, HELP, KB([B("🏠 Menu", "menu")]))
     elif data == "sessions":
@@ -1479,7 +1556,12 @@ async def on_button(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await show(q, ctx, "🆕 Started a fresh Claude conversation.\n" + chat_banner(), chat_kb())
     elif data == "ec":
         ctx.chat_data.pop("mode", None)
-        await show(q, ctx, "⏹ Chat mode off.", KB([B("🏠 Menu", "menu")]))
+        s = mgr.current(chat)
+        if s:
+            await show(q, ctx, "⏹ Chat mode off — back to your session.")
+            await s.refresh(repost=True)
+        else:
+            await show(q, ctx, "⏹ Chat mode off.", KB([B("🏠 Menu", "menu")]))
 
     # ---------- sessions ----------
     elif head == "sw":
@@ -1517,7 +1599,7 @@ async def on_button(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     elif data == "cancel":
         ctx.chat_data["step"] = None
         ctx.chat_data.pop("draft", None)
-        await show(q, ctx, *menu_view(uid, chat))
+        await show(q, ctx, *menu_view(uid, chat, ctx.chat_data.get("mode")))
     elif data == "save":
         last = ctx.chat_data.get("last")
         if not last:
@@ -1534,7 +1616,7 @@ async def on_button(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await save_host(ctx, chat, uid, rest)
     elif data == "cna":
         ctx.chat_data.pop("await", None)
-        await show(q, ctx, *menu_view(uid, chat))
+        await show(q, ctx, *menu_view(uid, chat, ctx.chat_data.get("mode")))
 
     # ---------- hosts ----------
     elif head == "hv":

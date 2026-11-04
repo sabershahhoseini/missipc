@@ -236,7 +236,8 @@ class Session:
             [Btn("⚡ Snippets", callback_data=f"t:{s}:snip"), Btn("📊 Dash", callback_data=f"t:{s}:dash"),
              Btn("🖼 Shot", callback_data=f"t:{s}:shot"), Btn("📄 Log", callback_data=f"t:{s}:out")],
             [Btn(other, callback_data=f"t:{s}:size"), Btn("🖥 Sessions", callback_data="sessions"),
-             Btn("🏠 Menu", callback_data="menu"), Btn("🔌 Close", callback_data=f"t:{s}:exit")],
+             Btn("🔌 Close", callback_data=f"t:{s}:exit")],
+            [Btn("🤖 Chat with Claude", callback_data="chat_on"), Btn("🏠 Menu", callback_data="menu")],
         ])
 
     async def refresh(self, repost: bool = False):
