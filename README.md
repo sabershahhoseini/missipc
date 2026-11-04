@@ -58,7 +58,7 @@ For running it permanently, see `deploy/sshbot.service`.
 ### Config file instead of env vars
 
 Any setting below can go in a YAML file instead of exporting env vars every
-time (top-level keys match the variable names):
+time:
 
 ```bash
 cp deploy/bot.yaml.example bot.yaml   # edit it
@@ -68,33 +68,41 @@ python bot.py --config bot.yaml
 ```
 
 ```yaml
-BOT_TOKEN: "123456:ABC..."
-ALLOWED_USERS: [11111111]
-IDLE_TIMEOUT_MIN: 30
+bot:
+  token: "123456:ABC..."
+  allowed_users: [11111111]
+
+security:
+  unlock_minutes: 15
+
+sessions:
+  idle_timeout_min: 30
 ```
 
-Real environment variables still take priority over the file, so you can mix
-both (e.g. keep `BOT_TOKEN` out of the file and export it separately).
-`ALLOWED_USERS` / `ALERT_CHAT_IDS` accept either a YAML list or a comma string.
+See `deploy/bot.yaml.example` for every section. Real environment variables
+still take priority over the file, so you can mix both (e.g. keep the token
+out of the file and export `BOT_TOKEN` separately).
 
-## Settings (environment variables, or the same names in a config file)
+## Settings
 
-| Variable | Default | Meaning |
-|---|---|---|
-| `BOT_TOKEN` | required | Bot token from @BotFather |
-| `ALLOWED_USERS` | required | Comma-separated Telegram user IDs |
-| `ALERT_CHAT_IDS` | = allowed users | Where monitoring alerts go |
-| `DATA_DIR` | `data` | Hosts, keys, pinned host keys, 2FA secrets, audit log |
-| `REQUIRE_2FA` | `1` | Set `0` to allow use without 2FA (not recommended) |
-| `UNLOCK_MINUTES` | `15` | Unlock window, extended by each action |
-| `IDLE_TIMEOUT_MIN` | `30` | Close sessions with no input or output for this long (`0` = never) |
-| `TERM_SIZE` | `wide` | `wide` (80×24) or `narrow` (46×22, phones) |
-| `TMUX_SESSION` | `tgbot` | tmux session name for hosts with tmux on |
-| `REMIND_EVERY_MIN` | `60` | Repeat interval for alerts that stay failing |
-| `HEALTHCHECK_URL` | – | Pinged on `HEALTHCHECK_INTERVAL` (dead man's switch, e.g. healthchecks.io) |
-| `HEALTHCHECK_INTERVAL` | `300` | Seconds between heartbeat pings |
-| `FONT_PATH` | auto | Monospace TTF for screenshots |
-| `CONFIG_FILE` | – | Path to a YAML config file (same as `--config`) |
+Env var always wins; otherwise falls back to the YAML path, then the default.
+
+| Env var | YAML path | Default | Meaning |
+|---|---|---|---|
+| `BOT_TOKEN` | `bot.token` | required | Bot token from @BotFather |
+| `ALLOWED_USERS` | `bot.allowed_users` | required | Telegram user IDs (list or comma string) |
+| `ALERT_CHAT_IDS` | `bot.alert_chat_ids` | = allowed users | Where monitoring alerts go |
+| `DATA_DIR` | `data_dir` | `data` | Hosts, keys, pinned host keys, 2FA secrets, audit log |
+| `REQUIRE_2FA` | `security.require_2fa` | `true` | Set to `false`/`0` to allow use without 2FA (not recommended) |
+| `UNLOCK_MINUTES` | `security.unlock_minutes` | `15` | Unlock window, extended by each action |
+| `IDLE_TIMEOUT_MIN` | `sessions.idle_timeout_min` | `30` | Close sessions with no input or output for this long (`0` = never) |
+| `TERM_SIZE` | `sessions.term_size` | `wide` | `wide` (80×24) or `narrow` (46×22, phones) |
+| `TMUX_SESSION` | `sessions.tmux_session` | `tgbot` | tmux session name for hosts with tmux on |
+| `REMIND_EVERY_MIN` | `monitoring.remind_every_min` | `60` | Repeat interval for alerts that stay failing |
+| `HEALTHCHECK_URL` | `monitoring.healthcheck_url` | – | Pinged on `healthcheck_interval` (dead man's switch, e.g. healthchecks.io) |
+| `HEALTHCHECK_INTERVAL` | `monitoring.healthcheck_interval` | `300` | Seconds between heartbeat pings |
+| `FONT_PATH` | `font_path` | auto | Monospace TTF for screenshots |
+| `CONFIG_FILE` | – | – | Path to the YAML config file (same as `--config`) |
 
 ## Quick tour
 

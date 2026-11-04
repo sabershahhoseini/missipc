@@ -1,10 +1,31 @@
-"""All settings, read from environment variables -- optionally pre-loaded from a YAML config file.
+"""All settings. Env vars always win; below that, an optional nested YAML file.
 
-Pick the file with `python bot.py --config path/to/bot.yaml` (or just
-`python bot.py path/to/bot.yaml`), or set CONFIG_FILE=path/to/bot.yaml.
-Top-level keys match the environment variable names below (e.g. BOT_TOKEN).
-ALLOWED_USERS / ALERT_CHAT_IDS may be a YAML list or a comma string.
-Real environment variables still win over anything the file sets.
+Pick the file with `python bot.py --config path/to/bot.yaml` (or a bare path
+argument, or CONFIG_FILE=path/to/bot.yaml). Shape:
+
+    bot:
+      token: "123456:ABC..."
+      allowed_users: [11111111]
+      alert_chat_ids: []            # defaults to allowed_users
+
+    security:
+      require_2fa: true
+      unlock_minutes: 15
+
+    sessions:
+      idle_timeout_min: 30
+      term_size: wide
+      tmux_session: tgbot
+
+    monitoring:
+      remind_every_min: 60
+      healthcheck_url: ""
+      healthcheck_interval: 300
+
+    data_dir: data
+    font_path: ""
+
+See deploy/bot.yaml.example for the full, commented version.
 """
 import os
 import sys
@@ -24,10 +45,10 @@ def _config_path() -> str:
     return os.environ.get("CONFIG_FILE", "")
 
 
-def _load_config_file():
+def _load_yaml() -> dict:
     path = _config_path()
     if not path:
-        return
+        return {}
     try:
         with open(path) as f:
             data = yaml.safe_load(f) or {}
@@ -36,54 +57,82 @@ def _load_config_file():
     except yaml.YAMLError as e:
         raise SystemExit(f"Invalid YAML in {path}: {e}")
     if not isinstance(data, dict):
-        raise SystemExit(f"{path}: expected a mapping of KEY: value at the top level")
-    for k, v in data.items():
-        if v is None:
-            continue
-        if isinstance(v, list):
-            v = ",".join(str(x) for x in v)
-        elif isinstance(v, bool):
-            v = "1" if v else "0"
-        os.environ.setdefault(str(k), str(v))
+        raise SystemExit(f"{path}: expected a mapping at the top level")
+    return data
 
 
-_load_config_file()
+_FILE = _load_yaml()
 
 
-def _ids(name: str) -> set[int]:
-    return {int(x) for x in os.environ.get(name, "").replace(" ", "").split(",") if x}
+def _path(dotted: str):
+    """Walk a dotted path (e.g. 'bot.token') through the loaded YAML."""
+    node = _FILE
+    for part in dotted.split("."):
+        if not isinstance(node, dict) or part not in node:
+            return None
+        node = node[part]
+    return node
 
 
-def _int(name: str, default: int) -> int:
+def _str(env_name: str, dotted: str, default: str = "") -> str:
+    if env_name in os.environ:
+        return os.environ[env_name]
+    v = _path(dotted)
+    return default if v is None else str(v)
+
+
+def _bool(env_name: str, dotted: str, default: bool) -> bool:
+    if env_name in os.environ:
+        return os.environ[env_name] != "0"
+    v = _path(dotted)
+    return default if v is None else bool(v)
+
+
+def _int(env_name: str, dotted: str, default: int) -> int:
+    v = os.environ.get(env_name)
+    if v is None:
+        v = _path(dotted)
+    if v is None:
+        return default
     try:
-        return int(os.environ.get(name, default))
-    except ValueError:
+        return int(v)
+    except (TypeError, ValueError):
         return default
 
 
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
-ALLOWED = _ids("ALLOWED_USERS")
-ALERT_CHATS = _ids("ALERT_CHAT_IDS") or ALLOWED       # who receives monitoring alerts
+def _ids(env_name: str, dotted: str) -> set[int]:
+    v = os.environ.get(env_name)
+    if v is None:
+        v = _path(dotted)
+    if v is None:
+        return set()
+    items = v if isinstance(v, (list, tuple)) else str(v).replace(" ", "").split(",")
+    return {int(x) for x in items if str(x)}
 
-DATA_DIR = os.environ.get("DATA_DIR", "data")
-REQUIRE_2FA = os.environ.get("REQUIRE_2FA", "1") != "0"
-UNLOCK_MINUTES = _int("UNLOCK_MINUTES", 15)           # sliding window after a correct code
+
+BOT_TOKEN = _str("BOT_TOKEN", "bot.token")
+ALLOWED = _ids("ALLOWED_USERS", "bot.allowed_users")
+ALERT_CHATS = _ids("ALERT_CHAT_IDS", "bot.alert_chat_ids") or ALLOWED  # who receives monitoring alerts
+
+DATA_DIR = _str("DATA_DIR", "data_dir", "data")
+REQUIRE_2FA = _bool("REQUIRE_2FA", "security.require_2fa", True)
+UNLOCK_MINUTES = _int("UNLOCK_MINUTES", "security.unlock_minutes", 15)  # sliding window after a correct code
 MAX_CODE_TRIES = 5
 CODE_LOCKOUT_MIN = 15
 
-IDLE_TIMEOUT_MIN = _int("IDLE_TIMEOUT_MIN", 30)       # 0 disables
+IDLE_TIMEOUT_MIN = _int("IDLE_TIMEOUT_MIN", "sessions.idle_timeout_min", 30)  # 0 disables
 SIZES = {"wide": (80, 24), "narrow": (46, 22)}
-DEFAULT_SIZE = os.environ.get("TERM_SIZE", "wide")
+DEFAULT_SIZE = _str("TERM_SIZE", "sessions.term_size", "wide")
 if DEFAULT_SIZE not in SIZES:
     DEFAULT_SIZE = "wide"
 RENDER_INTERVAL = 1.0
 LOG_LIMIT = 200_000
 CONNECT_TIMEOUT = 20
-TMUX_SESSION = os.environ.get("TMUX_SESSION", "tgbot")
+TMUX_SESSION = _str("TMUX_SESSION", "sessions.tmux_session", "tgbot")
 
-MONITOR_TICK = 10                                     # scheduler resolution, seconds
-REMIND_EVERY = _int("REMIND_EVERY_MIN", 60) * 60      # repeat alert while still failing
-HEALTHCHECK_URL = os.environ.get("HEALTHCHECK_URL", "")
-HEALTHCHECK_INTERVAL = _int("HEALTHCHECK_INTERVAL", 300)
+MONITOR_TICK = 10  # scheduler resolution, seconds
+REMIND_EVERY = _int("REMIND_EVERY_MIN", "monitoring.remind_every_min", 60) * 60  # repeat while still failing
+HEALTHCHECK_URL = _str("HEALTHCHECK_URL", "monitoring.healthcheck_url", "")
+HEALTHCHECK_INTERVAL = _int("HEALTHCHECK_INTERVAL", "monitoring.healthcheck_interval", 300)
 
-FONT_PATH = os.environ.get("FONT_PATH", "")
+FONT_PATH = _str("FONT_PATH", "font_path", "")

@@ -1,19 +1,25 @@
 # Copy to bot.yaml (or anywhere) and fill in, then:
 #   python bot.py --config bot.yaml
-# Top-level keys match the environment variable names in the README.
-# Anything set as a real environment variable overrides this file.
+# Any real environment variable overrides the matching setting below.
 
-BOT_TOKEN: "123456:ABC..."
-ALLOWED_USERS: [11111111]
+bot:
+  token: "123456:ABC..."          # from @BotFather
+  allowed_users: [11111111]       # your numeric Telegram ID (ask @userinfobot)
+  # alert_chat_ids: [11111111]    # defaults to allowed_users
 
-# ALERT_CHAT_IDS: [11111111]
-# DATA_DIR: data
-# REQUIRE_2FA: 1
-# UNLOCK_MINUTES: 15
-# IDLE_TIMEOUT_MIN: 30
-# TERM_SIZE: wide
-# TMUX_SESSION: tgbot
-# REMIND_EVERY_MIN: 60
-# HEALTHCHECK_URL:
-# HEALTHCHECK_INTERVAL: 300
-# FONT_PATH:
+security:
+  require_2fa: true                # set false to allow use without 2FA (not recommended)
+  unlock_minutes: 15                # unlock window, extended by each action
+
+sessions:
+  idle_timeout_min: 30              # close sessions with no input or output this long (0 = never)
+  term_size: wide                   # wide (80x24) or narrow (46x22, phones)
+  tmux_session: tgbot               # tmux session name for hosts with tmux on
+
+monitoring:
+  remind_every_min: 60              # repeat interval for alerts that stay failing
+  healthcheck_url: ""               # pinged periodically, e.g. a healthchecks.io URL
+  healthcheck_interval: 300         # seconds between heartbeat pings
+
+data_dir: data                      # hosts, keys, pinned host keys, 2FA secrets, audit log
+font_path: ""                       # monospace TTF for screenshots; blank = auto-detect
