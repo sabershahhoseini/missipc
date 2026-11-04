@@ -35,12 +35,15 @@ import yaml
 
 def _config_path() -> str:
     args = sys.argv[1:]
-    if "--config" in args:
-        i = args.index("--config")
+    flag = next((a for a in args if a in ("--config", "-config")), None)
+    if flag:
+        i = args.index(flag)
         if i + 1 >= len(args):
-            raise SystemExit("--config needs a path")
+            raise SystemExit(f"{flag} needs a path")
         return args[i + 1]
-    if args and not args[0].startswith("-"):
+    if args and args[0].startswith("-"):
+        raise SystemExit(f"Unrecognized option '{args[0]}' -- use --config <path>")
+    if args:
         return args[0]
     return os.environ.get("CONFIG_FILE", "")
 
