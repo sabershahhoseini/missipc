@@ -1,0 +1,7 @@
+python-telegram-bot>=21
+asyncssh>=2.14
+pyte>=0.8
+pyotp>=2.9
+qrcode[pil]>=7.4
+pillow>=10
+httpx>=0.25

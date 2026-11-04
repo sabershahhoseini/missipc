@@ -1,0 +1,113 @@
+# Telegram SSH Bot
+
+Drive your servers from Telegram: a live terminal, multiple sessions, key auth,
+file transfer, monitoring with alerts, and authenticator-app 2FA.
+
+## Features
+
+- **Live interactive terminal** per server, with VT100 rendering, button
+  controls (arrows, Ctrl keys, Esc/Tab), screenshots, and multiple sessions
+  you can switch between.
+- **Key auth**: generate or import ed25519 keys, install them on a server in
+  one tap, import existing private keys.
+- **Saved hosts** with optional jump host and tmux session attach.
+- **File transfer**: send a file to upload it, `/get path` to download.
+- **Broadcast commands** across every open session or a set of saved hosts.
+- **Monitoring**: disk/service/load/memory/HTTP/custom checks with anti-spam
+  alerting, mute windows, a dead man's switch heartbeat, and a quick
+  CPU/RAM/disk dashboard per host.
+- **Security**: mandatory authenticator-app 2FA with a sliding unlock window,
+  host-key pinning (refuses on change — MITM protection), confirmation
+  prompts before destructive-looking commands, and an audit log.
+
+## Setup
+
+```bash
+python3 -m venv venv && . venv/bin/activate
+pip install -r requirements.txt
+export BOT_TOKEN="123456:ABC..."          # from @BotFather
+export ALLOWED_USERS="11111111"           # your numeric Telegram ID (ask @userinfobot)
+python bot.py
+```
+
+Then send `/start` to your bot. It asks you to set up 2FA first: send `/2fa`,
+add the setup key (or scan the QR) in your authenticator app, and send the
+6‑digit code. After that, the bot locks itself after 15 minutes without
+activity; just send a fresh code to unlock.
+
+For running it permanently, see `sshbot.service`.
+
+### Config file instead of env vars
+
+Any setting below can go in a plain `KEY=VALUE` file instead of exporting env
+vars every time:
+
+```bash
+cp bot.conf.example bot.conf   # edit it
+python bot.py --config bot.conf
+# or: python bot.py bot.conf
+# or: CONFIG_FILE=bot.conf python bot.py
+```
+
+Real environment variables still take priority over the file, so you can mix
+both (e.g. keep `BOT_TOKEN` out of the file and export it separately).
+
+## Settings (environment variables, or the same names in a config file)
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `BOT_TOKEN` | required | Bot token from @BotFather |
+| `ALLOWED_USERS` | required | Comma-separated Telegram user IDs |
+| `ALERT_CHAT_IDS` | = allowed users | Where monitoring alerts go |
+| `DATA_DIR` | `data` | Hosts, keys, pinned host keys, 2FA secrets, audit log |
+| `REQUIRE_2FA` | `1` | Set `0` to allow use without 2FA (not recommended) |
+| `UNLOCK_MINUTES` | `15` | Unlock window, extended by each action |
+| `IDLE_TIMEOUT_MIN` | `30` | Close sessions with no input or output for this long (`0` = never) |
+| `TERM_SIZE` | `wide` | `wide` (80×24) or `narrow` (46×22, phones) |
+| `TMUX_SESSION` | `tgbot` | tmux session name for hosts with tmux on |
+| `REMIND_EVERY_MIN` | `60` | Repeat interval for alerts that stay failing |
+| `HEALTHCHECK_URL` | – | Pinged on `HEALTHCHECK_INTERVAL` (dead man's switch, e.g. healthchecks.io) |
+| `HEALTHCHECK_INTERVAL` | `300` | Seconds between heartbeat pings |
+| `FONT_PATH` | auto | Monospace TTF for screenshots |
+| `CONFIG_FILE` | – | Path to a `KEY=VALUE` config file (same as `--config`) |
+
+## Quick tour
+
+- `/ssh root:pass@1.2.3.4:22` connects in one go (the message is deleted).
+  `/ssh root@1.2.3.4` asks only for the password; `/ssh web1` uses a saved host.
+  Options: `-J jumphost`, `key=name`, `tmux`.
+- Type normally to send commands to the active session. Buttons give you Esc,
+  Tab, arrows, Ctrl keys, snippets, dashboard, screenshot and the full log.
+- `/sessions`, `/switch N`, `/stop N`, `/stop all`.
+- After connecting with a password, tap **🔑 Use key auth**: the bot generates
+  an ed25519 key, installs it on the server and switches the saved host to it.
+- Send a file to upload it to the active server (caption = target path).
+  `/get path` downloads.
+- `/all cmd` runs on every open session; `/run web1,db1 cmd` or `/run all cmd`
+  runs on saved key-auth hosts.
+- `/checks` → **➕ Add check**: disk, service, load, memory, HTTP or any custom
+  command (exit 0 = OK). Alerts fire after 2 failures in a row, remind hourly,
+  and announce recovery. `/status`, `/mute web1 2h`.
+- `/help` lists everything.
+
+## Security notes
+
+- Keys, 2FA secrets and the audit log live in `DATA_DIR` (mode 700). Anyone
+  with that directory and the bot token controls every server the bot can
+  reach: run the bot on a machine you trust, ideally not one it monitors.
+- Prefer key auth. Passwords you type pass through Telegram's servers (bot
+  chats aren't end-to-end encrypted), even though the bot deletes them.
+- Host keys are pinned on first connect. If a key changes, the connection is
+  refused before any credentials are sent; `/forget host:port` (requires a
+  2FA code) clears a pin after a legitimate reinstall.
+- For monitoring, consider a dedicated low-privilege user on each server.
+- Dangerous-looking commands (`rm -r`, `reboot`, `mkfs`, `dd of=/dev/…`, …)
+  ask for confirmation first. Input typed at password prompts is logged as
+  `[hidden]` in the audit log.
+- This is a safety net against mistakes, not a security boundary against a
+  determined attacker who already controls your Telegram account or bot
+  token — treat both of those as equivalent to root on every server it reaches.
+
+## License
+
+MIT — see [LICENSE](LICENSE).

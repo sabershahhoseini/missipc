@@ -1,0 +1,19 @@
+# Copy to bot.conf (or anywhere) and fill in, then:
+#   python bot.py --config bot.conf
+# Lines are KEY=VALUE, '#' starts a comment, values may be quoted.
+# Anything set as a real environment variable overrides this file.
+
+BOT_TOKEN=123456:ABC...
+ALLOWED_USERS=11111111
+
+# ALERT_CHAT_IDS=11111111
+# DATA_DIR=data
+# REQUIRE_2FA=1
+# UNLOCK_MINUTES=15
+# IDLE_TIMEOUT_MIN=30
+# TERM_SIZE=wide
+# TMUX_SESSION=tgbot
+# REMIND_EVERY_MIN=60
+# HEALTHCHECK_URL=
+# HEALTHCHECK_INTERVAL=300
+# FONT_PATH=
