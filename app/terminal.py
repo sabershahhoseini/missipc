@@ -15,7 +15,7 @@ from telegram.error import BadRequest, NetworkError, RetryAfter, TimedOut
 
 from . import config
 
-log = logging.getLogger("sshbot.term")
+log = logging.getLogger("missipc.term")
 
 KEYS = {
     "esc": "\x1b", "tab": "\t", "enter": "\r",

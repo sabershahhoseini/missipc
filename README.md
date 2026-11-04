@@ -1,23 +1,17 @@
-# Telegram PC
+# MissiPC
 
-Your laptop, in your pocket. If you're away from it and need to SSH into a
-server, or just want to ask Claude something, this bot is the stand-in:
-a live terminal and a Claude chat, both from Telegram.
+*I miss my PC.*
+
+For when your laptop isn't with you but a server needs SSHing into, or you
+just want to ask Claude something — a live terminal and a Claude chat, both
+from Telegram.
 
 ## What it does
 
-- **SSH from your phone** — a real interactive terminal per server (VT100
-  rendering, button controls, screenshots), multiple sessions at once, saved
-  hosts, key generation/install, jump hosts, file upload/download, and
-  broadcasting a command to several servers at once.
-- **Chat with Claude** — `/chat` turns the conversation into a Claude chat
-  instead of a terminal. Uses your Claude Code CLI login (Pro/Max
-  subscription), not an API key.
-- **Monitoring** — disk/service/load/memory/HTTP/custom checks with alerts,
-  mute windows, and a quick dashboard, so you notice problems before you'd
-  normally be at a keyboard to.
-- **Locked down** — mandatory 2FA, host-key pinning, confirmation before
-  destructive-looking commands, an audit log.
+- **SSH from your phone** — a real terminal, multiple sessions, saved hosts, file transfer.
+- **Chat with Claude** — `/chat` talks to Claude instead, no API key needed.
+- **Monitoring** — checks and alerts, so problems don't wait for you to be at a keyboard.
+- **Locked down** — mandatory 2FA, host-key pinning, an audit log.
 
 ## Setup
 
@@ -33,7 +27,7 @@ Send `/start` to your bot. It'll ask you to set up 2FA first (`/2fa` — scan
 the QR, send the 6-digit code). After that it locks itself after 15 minutes
 idle; send a fresh code to unlock.
 
-To run it permanently, see `deploy/sshbot.service`.
+To run it permanently, see `deploy/missipc.service`.
 
 To use `/chat`, install the Claude Code CLI on the same machine and log in
 once with your subscription — no API key needed:

@@ -25,7 +25,7 @@ class Auth:
         secret = pyotp.random_base32()
         self.store["totp"][str(uid)] = {"secret": secret, "enabled": False, "last_step": 0}
         self.store.save()
-        uri = pyotp.TOTP(secret).provisioning_uri(name=account, issuer_name="SSH Bot")
+        uri = pyotp.TOTP(secret).provisioning_uri(name=account, issuer_name="MissiPC")
         return secret, uri
 
     def disable(self, uid):

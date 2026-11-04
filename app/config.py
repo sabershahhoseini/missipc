@@ -15,7 +15,7 @@ argument, or CONFIG_FILE=path/to/bot.yaml). Shape:
     sessions:
       idle_timeout_min: 30
       term_size: wide
-      tmux_session: tgbot
+      tmux_session: missipc
 
     monitoring:
       remind_every_min: 60
@@ -135,7 +135,7 @@ if DEFAULT_SIZE not in SIZES:
 RENDER_INTERVAL = 1.0
 LOG_LIMIT = 200_000
 CONNECT_TIMEOUT = 20
-TMUX_SESSION = _str("TMUX_SESSION", "sessions.tmux_session", "tgbot")
+TMUX_SESSION = _str("TMUX_SESSION", "sessions.tmux_session", "missipc")
 
 MONITOR_TICK = 10  # scheduler resolution, seconds
 REMIND_EVERY = _int("REMIND_EVERY_MIN", "monitoring.remind_every_min", 60) * 60  # repeat while still failing

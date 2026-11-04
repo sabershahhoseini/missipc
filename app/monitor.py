@@ -12,7 +12,7 @@ from telegram.constants import ParseMode
 from . import config, sshconn
 from .terminal import ago, tg
 
-log = logging.getLogger("sshbot.monitor")
+log = logging.getLogger("missipc.monitor")
 
 TYPES = {
     "disk": "💾 Disk", "service": "⚙️ Service", "load": "🔥 Load",

@@ -1,4 +1,4 @@
-"""Telegram SSH bot — all Telegram handlers.  Run from the repo root:  python bot.py"""
+"""MissiPC — all Telegram handlers.  Run from the repo root:  python bot.py"""
 import asyncio
 import html
 import io
@@ -27,7 +27,7 @@ from .terminal import KEYS, PASSWORD_PROMPT, SessionManager, Session, ago, is_da
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("asyncssh").setLevel(logging.WARNING)
-log = logging.getLogger("sshbot")
+log = logging.getLogger("missipc")
 
 HTML = ParseMode.HTML
 NOPREVIEW = LinkPreviewOptions(is_disabled=True)
@@ -163,7 +163,7 @@ async def begin_2fa_setup(ctx, chat, uid, user):
     pretty = " ".join(secret[i:i + 4] for i in range(0, len(secret), 4))
     text = ("🔐 <b>Set up your authenticator</b>\n\n"
             "1. In your authenticator app: add account → <i>Enter a setup key</i>\n"
-            "2. Account name: <code>SSH Bot</code>\n"
+            "2. Account name: <code>MissiPC</code>\n"
             f"3. Key: <code>{pretty}</code>\n"
             "4. Type: time-based\n\n"
             "(or scan the QR code)\n\n"
@@ -245,7 +245,7 @@ async def run_confirmed(update, ctx, action):
 # views
 # ======================================================================
 
-HELP = """🖥 <b>SSH Bot — commands</b>
+HELP = """🖥 <b>MissiPC — commands</b>
 
 <b>Connect</b>
 /ssh — wizard  ·  /ssh user:pass@host:port  ·  /ssh user@host  ·  /ssh <i>savedname</i>
@@ -286,7 +286,7 @@ def menu_view(uid, chat):
     line = f"{lock} · {len(sess)} session(s) · {len(checks)} check(s)"
     if failing:
         line += f" · 🔴 {failing} failing"
-    return (f"🖥 <b>SSH Bot</b>\n{line}",
+    return (f"🖥 <b>MissiPC</b>\n{line}",
             KB([B("🔐 Connect", "new"), B(f"⭐ Hosts ({len(store['hosts'])})", "hosts")],
                [B(f"🖥 Sessions ({len(sess)})", "sessions"), B("🩺 Checks", "checks")],
                [B("⚡ Snippets", "snips:a"), B("🔑 Keys", "keys")],

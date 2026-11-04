@@ -16,7 +16,7 @@ import os
 
 from . import config
 
-log = logging.getLogger("sshbot.claude")
+log = logging.getLogger("missipc.claude")
 
 WORKDIR = os.path.join(config.DATA_DIR, "claude_chat")
 _locks: dict[int, asyncio.Lock] = {}

@@ -14,7 +14,7 @@ security:
 sessions:
   idle_timeout_min: 30              # close sessions with no input or output this long (0 = never)
   term_size: wide                   # wide (80x24) or narrow (46x22, phones)
-  tmux_session: tgbot               # tmux session name for hosts with tmux on
+  tmux_session: missipc              # tmux session name for hosts with tmux on
 
 monitoring:
   remind_every_min: 60              # repeat interval for alerts that stay failing
