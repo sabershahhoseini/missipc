@@ -11,7 +11,7 @@ import pyte
 from PIL import Image, ImageDraw, ImageFont
 from telegram import InlineKeyboardButton as Btn, InlineKeyboardMarkup, InputFile
 from telegram.constants import ParseMode
-from telegram.error import BadRequest, RetryAfter
+from telegram.error import BadRequest, NetworkError, RetryAfter, TimedOut
 
 from . import config
 
@@ -50,12 +50,19 @@ def clean(text: str) -> str:
 
 
 async def tg(call):
-    """Run a Telegram API call, waiting out flood limits."""
-    for _ in range(3):
+    """Run a Telegram API call: wait out flood limits, retry transient network
+    hiccups a couple times, and swallow failure rather than raise -- a UI
+    update that doesn't land shouldn't take down the handler that triggered it."""
+    for attempt in range(3):
         try:
             return await call()
         except RetryAfter as e:
             await asyncio.sleep(e.retry_after + 0.5)
+        except (TimedOut, NetworkError) as e:
+            if attempt == 2:
+                log.warning("Telegram call failed after retries: %s", e)
+                return None
+            await asyncio.sleep(1 + attempt)
     return None
 
 
@@ -275,7 +282,13 @@ class Session:
                 data = await self.proc.stdout.read(4096)
                 if not data:
                     break
-                self.stream.feed(data)
+                try:
+                    self.stream.feed(data)
+                except Exception:
+                    # A malformed/unsupported escape sequence (known pyte bug
+                    # with some private-marker CSI codes) must not be treated
+                    # as the SSH connection dying -- drop this chunk and keep going.
+                    log.warning("session %s: terminal parser rejected a byte sequence, skipping", self.sid)
                 self.log = (self.log + data)[-config.LOG_LIMIT:]
                 self.dirty = True
                 self.last_output = time.time()

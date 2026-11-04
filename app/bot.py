@@ -16,6 +16,7 @@ from telegram.constants import ParseMode
 from telegram.error import BadRequest
 from telegram.ext import (Application, CallbackQueryHandler, CommandHandler, ContextTypes,
                           MessageHandler, filters)
+from telegram.request import HTTPXRequest
 
 from . import config, sshconn
 from .auth import Auth
@@ -1331,18 +1332,18 @@ async def on_button(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     uid = q.from_user.id
     if uid not in config.ALLOWED or not q.message:
-        await q.answer()
+        await tg(lambda: q.answer())
         return
     chat = q.message.chat.id
     data = q.data or ""
     if data == "cfc":
         ctx.chat_data.pop("confirm", None)
         ctx.chat_data.pop("await_code", None)
-        await q.answer("Cancelled")
+        await tg(lambda: q.answer("Cancelled"))
         await show(q, ctx, *menu_view(uid, chat))
         return
     if not auth.is_unlocked(uid):
-        await q.answer("🔒 Locked — send your 6-digit code first.", show_alert=True)
+        await tg(lambda: q.answer("🔒 Locked — send your 6-digit code first.", show_alert=True))
         return
     auth.touch(uid)
     head, _, rest = data.partition(":")
@@ -1352,20 +1353,20 @@ async def on_button(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         sid, _, key = rest.partition(":")
         s = mgr.get(chat, int(sid))
         if not s:
-            await q.answer("Session closed")
+            await tg(lambda: q.answer("Session closed"))
             return
         if not s.active:
             await mgr.switch(chat, s.sid)
         s.write(KEYS[key])
-        await q.answer()
+        await tg(lambda: q.answer())
         return
     if head == "t":
         sid, _, act = rest.partition(":")
         s = mgr.get_any(chat, int(sid))
         if not s:
-            await q.answer("Session not found")
+            await tg(lambda: q.answer("Session not found"))
             return
-        await q.answer()
+        await tg(lambda: q.answer())
         if act == "out":
             await ctx.bot.send_document(chat, s.output_file(), caption=f"📄 Output of [{s.sid}] {s.label}")
         elif s.closed:
@@ -1384,7 +1385,7 @@ async def on_button(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             store.audit(uid, "stop", sid=s.sid)
         return
 
-    await q.answer()
+    await tg(lambda: q.answer())
 
     # ---------- navigation ----------
     if data == "menu":
@@ -1658,13 +1659,26 @@ async def post_init(app: Application):
     asyncio.create_task(monitor.heartbeat_loop())
 
 
+async def on_error(update: object, ctx: ContextTypes.DEFAULT_TYPE):
+    from telegram.error import NetworkError, TimedOut
+    if isinstance(ctx.error, (TimedOut, NetworkError)):
+        log.warning("Telegram network hiccup: %s", ctx.error)
+        return
+    log.exception("Unhandled error while processing an update", exc_info=ctx.error)
+
+
 def main():
     global APP
     if not config.BOT_TOKEN:
         raise SystemExit("Set BOT_TOKEN.")
     if not config.ALLOWED:
         raise SystemExit("Set ALLOWED_USERS to your Telegram user ID(s); refusing to run open to everyone.")
-    APP = Application.builder().token(config.BOT_TOKEN).post_init(post_init).build()
+    timeouts = dict(connect_timeout=20, read_timeout=20, write_timeout=20, pool_timeout=20)
+    APP = (Application.builder().token(config.BOT_TOKEN)
+           .request(HTTPXRequest(**timeouts))
+           .get_updates_request(HTTPXRequest(**timeouts))
+           .post_init(post_init).build())
+    APP.add_error_handler(on_error)
     allowed = filters.User(user_id=config.ALLOWED)
     handlers = {
         "start": cmd_start, "menu": cmd_start, "help": cmd_help, "2fa": cmd_2fa, "lock": cmd_lock,
